@@ -1,0 +1,16 @@
+{
+  "note": "GitHub Actions, ubuntu-latest (4 vCPU, 16 GB), dbt --threads 4. Source: the four benchmark pull requests.",
+  "machine": "GitHub Actions runner (4 vCPU, 16 GB), dbt --threads 4",
+  "total_models": 1952,
+  "fusion_version": "2.0.5",
+  "models": {"state_modified": 702, "zhao": 61},
+  "tests": {"state_modified": 1320, "zhao": 106},
+  "v1": {
+    "wall": {"state_modified": 189.4, "zhao": 29.9},
+    "work": {"state_modified": 182.3, "zhao": 21.6}
+  },
+  "v2": {
+    "wall": {"state_modified": 148.1, "zhao": 19.8},
+    "work": {"state_modified": 143.5, "zhao": 14.6}
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "note": "Local run on an Apple-silicon laptop, dbt --threads 4. Source of the numbers in the README and docs/images/comparison.png.",
+  "total_models": 1952,
+  "fusion_version": "2.0.5",
+  "models": {
+    "state_modified": 702,
+    "zhao": 61
+  },
+  "tests": {
+    "state_modified": 1320,
+    "zhao": 106
+  },
+  "v1": {
+    "wall": {
+      "state_modified": 87.2,
+      "zhao": 25.0
+    },
+    "work": {
+      "state_modified": 73.9,
+      "zhao": 11.4
+    }
+  },
+  "v2": {
+    "wall": {
+      "state_modified": 45.3,
+      "zhao": 7.5
+    },
+    "work": {
+      "state_modified": 42.2,
+      "zhao": 4.0
+    }
+  },
+  "machine": "Apple-silicon laptop, dbt --threads 4"
+}

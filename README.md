@@ -29,30 +29,82 @@ fails a PR on a breaking change, and `zhao lineage`, an interactive lineage expl
 
 ## The result
 
-The change edits one column in one model, `int_ev_0000.v7` (`p.m4 + p.m3` → `(p.m4 + p.m3) * 1.1`).
+The change edits one column in one model, `int_ev_0000.v7` (`p.m4 + p.m3` → `(p.m4 + p.m3) * 1.1`). One line, in
+a hub view near the start of the graph.
 
 | | `dbt build --select state:modified+` | `zhao diff` → `dbt build --select …` |
 |---|---:|---:|
 | Models built (of 1,952) | **702** (36%) | **61** (3%) |
 | Tests run | 1,320 | 106 |
 
-Timings differ by machine, so the numbers below are from one run on an Apple-silicon laptop with dbt's
-`--threads 4` (the same setting CI uses). Compare the *ratios*, and run it yourself for your own numbers.
-[The four benchmark pull requests](#the-four-pull-requests) show the same comparison measured on GitHub Actions.
+That part does not depend on the machine: the counts are the same on every run and on both engines.
 
-| Wall-clock, select + build | `state:modified+` | `zhao diff` → build | |
+### Measured on GitHub Actions
+
+The four [benchmark pull requests](#the-four-pull-requests) ran each strategy on a stock GitHub runner
+(`ubuntu-latest`, 4 vCPU, 16 GB, dbt `--threads 4`):
+
+![Comparison measured on GitHub Actions](docs/images/comparison-ci.png)
+
+| | `state:modified+` | `zhao diff` → `dbt build` | Gap |
 |---|---:|---:|---:|
-| dbt 1.x | 87.2 s | 25.0 s | 3.5× faster |
-| dbt Fusion 2.x | 45.3 s | 7.5 s | 6.0× faster |
+| dbt Core (v1), wall-clock | 189.4 s | **29.9 s** | **6.3×** |
+| dbt Core (v1), build work only | 182.3 s | **21.6 s** | **8.4×** |
+| dbt Fusion 2.0.5, wall-clock | 148.1 s | **19.8 s** | **7.5×** |
+| dbt Fusion 2.0.5, build work only | 143.5 s | **14.6 s** | **9.8×** |
 
-Wall-clock includes dbt's own fixed cost of starting up and parsing all 1,952 models (13.3 s on dbt 1.x, 3.1 s on
-Fusion), which no selection strategy can avoid. With that removed, the work of building the selected models is
-**6.5× less on dbt 1.x (73.9 s → 11.4 s) and 10.6× less on Fusion (42.2 s → 4.0 s)**. Running `zhao diff`
-itself took 0.3–0.4 s.
+### On a laptop
+
+The same comparison on an Apple-silicon laptop (dbt `--threads 4`) gives a smaller gap, because a faster machine
+makes the unnecessary work cheaper:
+
+![Comparison measured on a laptop](docs/images/comparison.png)
+
+| | `state:modified+` | `zhao diff` → `dbt build` | Gap |
+|---|---:|---:|---:|
+| dbt Core (v1), wall-clock | 87.2 s | **25.0 s** | **3.5×** |
+| dbt Core (v1), build work only | 73.9 s | **11.4 s** | **6.5×** |
+| dbt Fusion 2.0.5, wall-clock | 45.3 s | **7.5 s** | **6.0×** |
+| dbt Fusion 2.0.5, build work only | 42.2 s | **4.0 s** | **10.6×** |
+
+**Your numbers will differ, and so will your gain.** Absolute seconds depend on the machine, and the size of the
+gap depends on the shape of the project (see [The shape of the project](#the-shape-of-the-project) and
+[When `zhao diff` doesn't help](#when-zhao-diff-doesnt-help)).
+
+*Wall-clock* is everything from starting the selection to the last test finishing. *Build work only* removes
+dbt's fixed cost of starting up and parsing all 1,952 models (about 4–8 s, measured by building one trivial view),
+which no selection strategy can avoid, and `zhao diff`'s own planning time (0.3–0.5 s, which *is* included in
+wall-clock).
 
 The 61 models `zhao` selects are exactly the models that read the changed column, directly or through a column
-derived from it. The generator knows the true column lineage of every model it writes, and `make compare`
-checks that `zhao`'s answer equals it.
+derived from it. The generator knows the true column lineage of every model it writes, and `make compare` checks
+that `zhao`'s answer equals it.
+
+### What it looks like
+
+What `zhao diff` reports for the change (the real output, shortened where marked). One column changed, so one
+model is listed under *Changed*, and the 61 models that read it are listed as impacted:
+
+![zhao diff report](docs/images/v1-zhao-diff.png)
+
+Then dbt. With `state:modified+` it builds the whole downstream cone, 702 models and 1,320 tests:
+
+![dbt build with state:modified+ on dbt Core](docs/images/v1-state-modified-build.png)
+
+Feeding the models `zhao diff` named to `dbt build` builds 61 models and 106 tests:
+
+![dbt build with the models zhao diff selected, on dbt Core](docs/images/v1-zhao-build.png)
+
+The same on dbt Fusion 2.0.5:
+
+![dbt build with state:modified+ on dbt Fusion](docs/images/v2-state-modified-build.png)
+
+![dbt build with the models zhao diff selected, on dbt Fusion](docs/images/v2-zhao-build.png)
+
+These images are drawn from the real logs of the GitHub Actions runs (`scripts/fetch_ci_logs.py` and
+`scripts/make_demo_images.py` regenerate them); nothing in them is edited, and "lines omitted" marks anything
+cut for length. The command shown at the top is the shell form of what the workflow ran. The full logs are on
+each pull request.
 
 ## Is the comparison fair?
 
