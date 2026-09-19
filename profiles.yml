@@ -1,0 +1,7 @@
+zhao_benchmark:
+  target: duckdb
+  outputs:
+    duckdb:
+      type: duckdb
+      path: "{{ env_var('BENCH_DB', 'data/v1/baseline/bench.duckdb') }}"
+      threads: "{{ env_var('BENCH_THREADS', '4') | as_number }}"

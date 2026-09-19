@@ -1,0 +1,75 @@
+# Runs one selection strategy for one dbt engine against a benchmark PR.
+#
+# A benchmark PR is a branch named  bench/<engine>-<strategy>  that carries the benchmark's one-line
+# change (change/change.json), where <engine> is v1 (dbt 1.x) or v2 (dbt Fusion 2.x) and <strategy> is
+# state-modified (dbt state:modified+) or zhao-diff (zhao diff, then dbt build on the models it names).
+# Any other pull request is ignored.
+name: benchmark
+
+on:
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  benchmark:
+    if: startsWith(github.head_ref, 'bench/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      ZHAO_VERSION: v0.5.2
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Read engine and strategy from the branch name
+        run: |
+          name="${GITHUB_HEAD_REF#bench/}"
+          engine="${name%%-*}"
+          strategy="${name#*-}"
+          case "$engine" in v1|v2) ;; *) echo "bad engine in branch name: $GITHUB_HEAD_REF"; exit 1;; esac
+          case "$strategy" in state-modified|zhao-diff) ;; *) echo "bad strategy in branch name: $GITHUB_HEAD_REF"; exit 1;; esac
+          echo "ENGINE=$engine" >> "$GITHUB_ENV"
+          echo "STRATEGY=$strategy" >> "$GITHUB_ENV"
+
+      - name: Check the PR carries exactly the benchmark change, and nothing else
+        run: python3 scripts/verify_change.py origin/master
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Select the dbt engine (uv)
+        run: make use-$ENGINE
+
+      - name: Install zhao
+        if: env.STRATEGY == 'zhao-diff'
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/allenhori/zhao-cli/master/scripts/install.sh | sh
+          echo "$HOME/.zhao/bin" >> "$GITHUB_PATH"
+
+      # Set-up, not timed. The baseline must be the project WITHOUT the change, so build it from master's models.
+      - name: Build the baseline (the unchanged project, once)
+        run: |
+          git checkout origin/master -- models
+          make baseline
+          git checkout HEAD -- models
+
+      - name: Run the strategy (this is the timed part)
+        run: .venv/bin/python scripts/bench.py ci-run --engine "$ENGINE" --strategy "$STRATEGY"
+
+      - name: Comment the result on the PR
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          f="results/$ENGINE/$STRATEGY.md"
+          [ -f "$f" ] && gh pr comment "${{ github.event.pull_request.number }}" --body-file "$f"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: results-${{ env.ENGINE }}-${{ env.STRATEGY }}
+          path: results/

@@ -1,0 +1,9 @@
+select
+    p0.customer_id as customer_id,
+    p0.segment_id as segment_id,
+    case when p0.s3 > p1.s1 then p0.s3 else p1.s1 end as t1,
+    p1.s4 as t2,
+    p0.s4 as t3,
+    p1.s4 + p0.s3 as t4
+from {{ ref('cust_0000') }} as p0
+left join {{ ref('cust_0014') }} as p1 on p1.customer_id = p0.customer_id
