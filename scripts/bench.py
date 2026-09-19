@@ -72,6 +72,16 @@ def engine_version(engine):
     return version("dbt-core")
 
 
+def group(title):
+    """Start a collapsible section in the GitHub Actions log (plain header elsewhere)."""
+    print(f"::group::{title}" if os.environ.get("GITHUB_ACTIONS") else f"\n=== {title}", flush=True)
+
+
+def endgroup():
+    if os.environ.get("GITHUB_ACTIONS"):
+        print("::endgroup::", flush=True)
+
+
 def db_path(engine, name):
     return DATA / engine / name / "bench.duckdb"
 
@@ -297,7 +307,9 @@ def ci_run(args):
     version = f"{ENGINE_NAMES[engine]} {engine_version(engine)}"
 
     # Setup (not timed): compile the project as checked out.
-    dbt(engine, ["compile"], db_path(engine, "baseline"), capture=True)
+    group("Set-up (not timed): dbt compile of the changed project")
+    dbt(engine, ["compile"], db_path(engine, "baseline"))
+    endgroup()
     manifest = json.loads((ROOT / "target" / "manifest.json").read_text())
     model_names = {n["name"] for n in manifest["nodes"].values() if n["resource_type"] == "model"}
 
@@ -311,6 +323,11 @@ def ci_run(args):
         plan_s = time.time() - t
         (ROOT / "target" / "zhao_plan.json").write_text(plan)
         impacted = json.loads(plan)["impacted_models"]
+        # For the log only (not timed): zhao's human-readable report of the same diff.
+        group("zhao diff: what the change reaches (report, not timed)")
+        run([zhao_bin(), "diff", "--state", str(state_dir / "manifest.json"), "--no-color"])
+        endgroup()
+        print(f"zhao diff named {len(impacted)} models to build: {' '.join(impacted)}", flush=True)
 
     # One strategy per job, so run on the baseline database itself (no 8 GB copy: CI runners have little disk).
     db = db_path(engine, "baseline")
@@ -320,18 +337,23 @@ def ci_run(args):
 
     if strategy == "state-modified":
         listed = dbt(engine, ["ls", "--resource-type", "model", "--select", "state:modified+", "--state",
-                              str(state_dir), "--output", "name"], db, capture=True).stdout.split()
+                              str(state_dir), "--output", "name", "--quiet"], db, capture=True).stdout.split()
         selected = {l.split(".")[-1] for l in listed} & model_names
+        print(f"dbt state:modified+ selects {len(selected)} models", flush=True)
         command = f"dbt build --select state:modified+ --state state/{engine}"
+        group("dbt build --select state:modified+ (timed)")
         t = time.time()
-        dbt(engine, ["build", "--select", "state:modified+", "--state", str(state_dir)], db, threads, capture=True)
+        dbt(engine, ["build", "--select", "state:modified+", "--state", str(state_dir)], db, threads)
         wall = time.time() - t
+        endgroup()
     else:
         selected = set(impacted)
         command = f"zhao diff --state state/{engine}/manifest.json --format json  ->  dbt build --select <impacted_models>"
+        group("dbt build --select <models named by zhao diff> (timed)")
         t = time.time()
-        dbt(engine, ["build", "--select", *impacted], db, threads, capture=True)
+        dbt(engine, ["build", "--select", *impacted], db, threads)
         wall = time.time() - t + plan_s
+        endgroup()
 
     built, tests = executed_models(engine)[:2]
     problems = []
