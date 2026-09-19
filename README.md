@@ -108,8 +108,9 @@ each pull request.
 
 ## Is the comparison fair?
 
-- **Same starting point.** Both strategies run against byte-identical copies of the same freshly built
-  "production" database, and both use the same committed baseline manifest (`state/v1/manifest.json`,
+- **Same starting point.** Both strategies start from the same freshly built "production" database: locally,
+  `make compare` runs each on its own copy of one baseline; in the pull requests, every job first builds the same
+  deterministic baseline from `master`. Both use the same committed baseline manifest (`state/v1/manifest.json`,
   `state/v2/manifest.json`).
 - **Only the selected work is timed.** Generating data, building the baseline, and compiling the changed project
   are set-up steps; they are excluded and reported separately. `zhao diff`'s own planning time *is* included in
