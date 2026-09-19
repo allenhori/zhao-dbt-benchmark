@@ -17,6 +17,7 @@ import argparse
 import json
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -59,12 +60,24 @@ def zhao_bin():
     return z
 
 
+ENGINE_NAMES = {"v1": "dbt Core (v1)", "v2": "dbt Fusion (v2)"}
+STRATEGY_NAMES = {"state-modified": "state:modified+", "zhao-diff": "zhao diff \u2192 dbt build"}
+
+
+def engine_version(engine):
+    """The engine's version without running dbt (`dbt --version` makes network calls)."""
+    if engine == "v2":
+        return FUSION_VERSION
+    from importlib.metadata import version
+    return version("dbt-core")
+
+
 def db_path(engine, name):
     return DATA / engine / name / "bench.duckdb"
 
 
 def run(cmd, env=None, capture=False, check=True):
-    e = {**os.environ, **(env or {})}
+    e = {**os.environ, "DBT_SEND_ANONYMOUS_USAGE_STATS": "false", **(env or {})}
     return subprocess.run(cmd, cwd=ROOT, env=e, text=True, capture_output=capture, check=check)
 
 
@@ -281,7 +294,7 @@ def ci_run(args):
     engine, strategy = engine_of(args), args.strategy
     state_dir = ROOT / "state" / engine
     threads = ["--threads", str(args.threads)]
-    version = run([dbt_bin(engine), "--version"], capture=True).stdout.strip().splitlines()[0]
+    version = f"{ENGINE_NAMES[engine]} {engine_version(engine)}"
 
     # Setup (not timed): compile the project as checked out.
     dbt(engine, ["compile"], db_path(engine, "baseline"), capture=True)
@@ -299,7 +312,8 @@ def ci_run(args):
         (ROOT / "target" / "zhao_plan.json").write_text(plan)
         impacted = json.loads(plan)["impacted_models"]
 
-    db = fresh_copy(engine, strategy)
+    # One strategy per job, so run on the baseline database itself (no 8 GB copy: CI runners have little disk).
+    db = db_path(engine, "baseline")
     t = time.time()
     dbt(engine, ["build", "--select", "stg_cu_0"], db, threads, capture=True)
     fixed_s = time.time() - t
@@ -335,7 +349,9 @@ def ci_run(args):
     out.mkdir(parents=True, exist_ok=True)
     (out / f"{strategy}.json").write_text(json.dumps(res, indent=2) + "\n")
     md = "\n".join([
-        f"### {strategy} on {version}",
+        f"### {ENGINE_NAMES[engine]} \u00b7 {STRATEGY_NAMES[strategy]}",
+        "",
+        f"Engine: {version}",
         "",
         f"`{command}`",
         "",
