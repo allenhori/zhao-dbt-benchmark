@@ -8,6 +8,6 @@ select
     coalesce(p.m4, 0) + 13 as v4,
     p.m3 + p.m4 as v5,
     round(p.m4 / 5.0, 4) as v6,
-    p.m4 + p.m3 as v7,
+    (p.m4 + p.m3) * 1.1 as v7,
     round(p.m4 / 5.0, 4) as v8
 from {{ ref('stg_ev_00') }} as p
